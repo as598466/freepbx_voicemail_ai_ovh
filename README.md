@@ -29,10 +29,12 @@ durée de la transcription ne bloque pas l'appel.
 | Situation                                           | Résultat                                          |
 |-----------------------------------------------------|---------------------------------------------------|
 | Transcription OK                                    | E-mail enrichi avec transcription + MP3           |
-| Échec de la transcription (réseau, quota, HTTP 5xx) | E-mail enrichi avec un avertissement + MP3        |
+| Échec de la transcription (réseau, quota, HTTP 5xx) | E-mail enrichi avec un avertissement + MP3 (joint même si `attach_audio` vaut `false`) |
 | Échec de la conversion MP3 (ffmpeg absent...)       | WAV d'origine joint à la place du MP3             |
 | Pas de pièce jointe (e-mail pager, `attach=no`)     | E-mail d'origine transmis tel quel                |
 | E-mail illisible, erreur PHPMailer, config invalide | E-mail d'origine transmis tel quel à sendmail     |
+| Erreur fatale PHP (`vendor/` absent, mémoire...)    | E-mail d'origine transmis tel quel à sendmail     |
+| Option inconnue dans **Mail Command**               | Option ignorée (avertissement dans les journaux)  |
 
 Les erreurs réseau, HTTP 429 et 5xx sont retentées (`max_retries`, attente exponentielle).
 
@@ -116,7 +118,7 @@ repris, sauf si `mail.from_address` / `mail.subject_prefix` sont renseignés.
 | `mail.from_address`     | `null`                                              | Remplace l'expéditeur généré par Asterisk      |
 | `mail.envelope_sender`  | `null`                                              | Expéditeur d'enveloppe (`sendmail -f`)         |
 | `mail.subject_prefix`   | `''`                                                | Ex. `'[Répondeur] '`                           |
-| `mail.attach_audio`     | `true`                                              | Joindre l'enregistrement                       |
+| `mail.attach_audio`     | `true`                                              | Joindre l'enregistrement (toujours joint si la transcription échoue) |
 | `mail.html_template`    | `templates/email.html.php`                          | Gabarit HTML personnalisé                      |
 | `mail.text_template`    | `templates/email.txt.php`                           | Gabarit texte personnalisé                     |
 | `log.debug`             | `false`                                             | Journaux détaillés                             |

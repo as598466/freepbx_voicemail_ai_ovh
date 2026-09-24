@@ -12,6 +12,63 @@ declare(strict_types=1);
 
 use VoicemailAi\Cli;
 
+// Read the voicemail before anything else can fail, so that the last resort handler can deliver it.
+$raw = (string) stream_get_contents(STDIN);
+$handled = false;
+
+// Last resort for fatal errors that bypass every fallback of Cli and Application (missing vendor/,
+// syntax error, memory exhaustion...): deliver the original email like the default "sendmail -t"
+// mailcmd. It must not depend on the autoloader, hence the direct proc_open() call.
+register_shutdown_function(static function () use (&$handled, $raw, $argv): void {
+    if ($handled || trim($raw) === '') {
+        return;
+    }
+
+    openlog('voicemail-ai', LOG_PID, LOG_MAIL);
+    syslog(LOG_CRIT, sprintf(
+        'voicemail-ai: stopped before delivery (%s), forwarding original email.',
+        error_get_last()['message'] ?? 'unknown error',
+    ));
+
+    try {
+        if (in_array('--dry-run', $argv, true)) {
+            fwrite(STDOUT, $raw);
+
+            return;
+        }
+
+        // Same binary as VoicemailAi\Config::DEFAULT_SENDMAIL.
+        $process = proc_open(
+            ['/usr/sbin/sendmail', '-t', '-oi'],
+            [0 => ['pipe', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
+            $pipes,
+        );
+
+        if (!is_resource($process)) {
+            throw new RuntimeException('Unable to start sendmail.');
+        }
+
+        for ($offset = 0, $length = strlen($raw); $offset < $length; $offset += $written) {
+            $written = fwrite($pipes[0], substr($raw, $offset, 65536));
+
+            if ($written === false || $written === 0) {
+                throw new RuntimeException('Unable to write to sendmail stdin.');
+            }
+        }
+
+        fclose($pipes[0]);
+
+        if (($exitCode = proc_close($process)) !== 0) {
+            throw new RuntimeException(sprintf('sendmail exited with code %d.', $exitCode));
+        }
+    } catch (Throwable $exception) {
+        syslog(LOG_CRIT, sprintf('voicemail-ai: voicemail notification lost: %s', $exception->getMessage()));
+    }
+});
+
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-exit((new Cli())->main($argv, STDIN, STDOUT));
+$exitCode = (new Cli())->main($argv, $raw, STDOUT);
+$handled = true;
+
+exit($exitCode);

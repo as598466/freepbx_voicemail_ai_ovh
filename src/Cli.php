@@ -26,17 +26,17 @@ final class Cli
 
     /**
      * @param list<string> $argv
-     * @param resource $stdin
+     * @param string $raw Email piped by Asterisk
      * @param resource $stdout
      */
-    public function main(array $argv, $stdin, $stdout): int
+    public function main(array $argv, string $raw, $stdout): int
     {
-        $options = $this->parseOptions($argv);
+        [$options, $unknown] = $this->parseOptions($argv);
 
-        if ($options === null) {
+        if ($unknown !== []) {
+            // A typo in the FreePBX "Mail Command" must not lose voicemails: warn and go on.
+            fwrite(STDERR, sprintf('voicemail-ai: ignoring unknown option(s): %s%s', implode(' ', $unknown), PHP_EOL));
             fwrite(STDERR, self::USAGE);
-
-            return Application::EXIT_FAILURE;
         }
 
         // Turn warnings into exceptions so that every failure reaches the fallback path.
@@ -48,35 +48,57 @@ final class Cli
             throw new ErrorException($message, 0, $severity, $file, $line);
         });
 
-        $raw = (string) stream_get_contents($stdin);
+        try {
+            return $this->process($raw, $options, $unknown, $options['dryRun'] ? $stdout : null);
+        } finally {
+            restore_error_handler();
+        }
+    }
 
+    /**
+     * @param array{config: string, dryRun: bool, verbose: bool} $options
+     * @param list<string> $unknown
+     * @param resource|null $output
+     */
+    private function process(string $raw, array $options, array $unknown, mixed $output): int
+    {
         try {
             $config = Config::fromFile($options['config']);
         } catch (Throwable $exception) {
-            return $this->rescue($raw, $exception, $options['dryRun'] ? $stdout : null);
+            return $this->rescue($raw, $exception, Config::DEFAULT_SENDMAIL, $output);
         }
 
-        $logger = new SyslogLogger(
-            $config->logIdent,
-            $config->debug || $options['verbose'],
-            $options['verbose'] ? STDERR : null,
-        );
+        try {
+            $logger = new SyslogLogger(
+                $config->logIdent,
+                $config->debug || $options['verbose'],
+                $options['verbose'] ? STDERR : null,
+            );
 
-        return Application::create($config, $logger, $options['dryRun'] ? $stdout : null)->run($raw);
+            if ($unknown !== []) {
+                $logger->warning('Ignoring unknown option(s): {options}', ['options' => implode(' ', $unknown)]);
+            }
+
+            return Application::create($config, $logger, $output)->run($raw);
+        } catch (Throwable $exception) {
+            // Application has its own fallbacks: this only catches unexpected failures.
+            return $this->rescue($raw, $exception, $config->sendmailPath, $output);
+        }
     }
 
     /**
      * @param list<string> $argv
      *
-     * @return array{config: string, dryRun: bool, verbose: bool}|null
+     * @return array{array{config: string, dryRun: bool, verbose: bool}, list<string>} Options and unknown arguments
      */
-    private function parseOptions(array $argv): ?array
+    private function parseOptions(array $argv): array
     {
         $options = [
             'config' => getenv('VOICEMAIL_AI_CONFIG') ?: dirname(__DIR__) . '/config/config.php',
             'dryRun' => false,
             'verbose' => false,
         ];
+        $unknown = [];
 
         foreach (array_slice($argv, 1) as $argument) {
             if ($argument === '--dry-run') {
@@ -86,21 +108,25 @@ final class Cli
             } elseif (str_starts_with($argument, '--config=') && strlen($argument) > 9) {
                 $options['config'] = substr($argument, 9);
             } else {
-                return null;
+                $unknown[] = $argument;
             }
         }
 
-        return $options;
+        return [$options, $unknown];
     }
 
     /**
-     * Configuration is broken: still deliver the voicemail as Asterisk would have done.
+     * Something unexpected failed: still deliver the voicemail as Asterisk would have done.
      *
      * @param resource|null $output
      */
-    private function rescue(string $raw, Throwable $exception, mixed $output): int
+    private function rescue(string $raw, Throwable $exception, string $sendmailPath, mixed $output): int
     {
-        $message = sprintf('voicemail-ai: %s Forwarding original email.', $exception->getMessage());
+        $message = sprintf(
+            'voicemail-ai: %s: %s. Forwarding original email.',
+            $exception::class,
+            rtrim($exception->getMessage(), '.'),
+        );
 
         openlog('voicemail-ai', LOG_PID, LOG_MAIL);
         syslog(LOG_ERR, $message);
@@ -117,7 +143,7 @@ final class Cli
         }
 
         try {
-            (new RawMailForwarder(new ProcessRunner(), Config::DEFAULT_SENDMAIL))->forward($raw);
+            (new RawMailForwarder(new ProcessRunner(), $sendmailPath))->forward($raw);
         } catch (Throwable $forwardException) {
             syslog(LOG_CRIT, sprintf('voicemail-ai: %s', $forwardException->getMessage()));
         }

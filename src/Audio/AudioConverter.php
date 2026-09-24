@@ -29,9 +29,22 @@ final readonly class AudioConverter
             return $audio;
         }
 
-        if (!is_executable($this->ffmpegPath)) {
+        try {
+            return $this->convert($audio, $this->ffmpegPath);
+        } catch (Throwable $exception) {
+            $this->logger->warning('Audio conversion error, attaching original audio: {exception}', [
+                'exception' => $exception,
+            ]);
+
+            return $audio;
+        }
+    }
+
+    private function convert(AudioFile $audio, string $ffmpegPath): AudioFile
+    {
+        if (!is_executable($ffmpegPath)) {
             $this->logger->warning('ffmpeg not found at {path}, attaching original audio.', [
-                'path' => $this->ffmpegPath,
+                'path' => $ffmpegPath,
             ]);
 
             return $audio;
@@ -52,7 +65,7 @@ final readonly class AudioConverter
 
             // 16 kHz (MPEG-2) is played everywhere, unlike 8 kHz (MPEG-2.5).
             $result = $this->processRunner->run([
-                $this->ffmpegPath,
+                $ffmpegPath,
                 '-hide_banner',
                 '-nostdin',
                 '-loglevel', 'error',
@@ -88,12 +101,6 @@ final readonly class AudioConverter
             ]);
 
             return $converted;
-        } catch (Throwable $exception) {
-            $this->logger->warning('Audio conversion error, attaching original audio: {exception}', [
-                'exception' => $exception,
-            ]);
-
-            return $audio;
         } finally {
             foreach ([$input, $output] as $file) {
                 if (is_file($file)) {

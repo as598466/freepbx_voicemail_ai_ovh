@@ -31,6 +31,8 @@ final readonly class OvhTranscriber implements TranscriberInterface
         private int $timeout = 120,
         private int $maxRetries = 2,
         private LoggerInterface $logger = new NullLogger(),
+        // Base delay of the exponential backoff, in seconds.
+        private int $retryDelay = 1,
     ) {}
 
     public function transcribe(AudioFile $audio): Transcript
@@ -43,7 +45,7 @@ final readonly class OvhTranscriber implements TranscriberInterface
                     throw $exception;
                 }
 
-                $delay = 2 ** $attempt;
+                $delay = $this->retryDelay * 2 ** $attempt;
 
                 $this->logger->warning('Transcription attempt {attempt} failed, retrying in {delay}s: {exception}', [
                     'attempt' => $attempt + 1,

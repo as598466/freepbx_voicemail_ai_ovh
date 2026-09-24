@@ -108,7 +108,8 @@ final readonly class Application
         }
 
         $transcript = $this->transcribe($voicemail->audio);
-        $attachment = $this->attachAudio ? $this->converter->toMp3($voicemail->audio) : null;
+        // Without transcription the recording is the only content left: attach it regardless of the setting.
+        $attachment = $this->attachAudio || $transcript === null ? $this->converter->toMp3($voicemail->audio) : null;
 
         try {
             $this->send($this->mailer->compose($voicemail, $transcript, $attachment));

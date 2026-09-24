@@ -33,17 +33,18 @@ Composer est installé localement dans le projet (`composer.phar`, ignoré par g
 
 **Invariant central : un message vocal ne doit jamais être perdu.** Chaque chemin d'échec se termine par la livraison de *quelque chose*. Toute modification doit préserver cet invariant :
 
-- `Cli` transforme les warnings PHP en `ErrorException`, pour que chaque échec atteigne un repli. Si le chargement de la configuration échoue, `Cli::rescue()` transmet l'entrée brute à `Config::DEFAULT_SENDMAIL` sans utiliser la configuration.
+- `bin/voicemail-ai` lit stdin avant de charger l'autoloader et enregistre une fonction d'arrêt de dernier recours : en cas d'erreur fatale (`vendor/` absent, erreur de syntaxe, mémoire épuisée…), l'e-mail brut est transmis à `/usr/sbin/sendmail -t` (ou écrit sur stdout en `--dry-run`). Ce code ne doit dépendre d'aucune classe du projet ; c'est la seule exception à la règle `ProcessRunner`.
+- `Cli` transforme les warnings PHP en `ErrorException`, pour que chaque échec atteigne un repli. Si le chargement de la configuration échoue, `Cli::rescue()` transmet l'entrée brute à `Config::DEFAULT_SENDMAIL` sans utiliser la configuration. Toute exception qui s'échappe d'`Application` passe aussi par `Cli::rescue()`, avec le sendmail configuré. Une option inconnue est ignorée avec un avertissement (stderr et syslog) : elle ne doit jamais empêcher la livraison.
 - `Application::run()` est le pipeline : `VoicemailParser` → `TranscriberInterface` → `AudioConverter::toMp3()` → `VoicemailMailer::compose()` → envoi.
   - Si l'analyse échoue ou s'il n'y a pas de pièce jointe audio (e-mail pager, `attach=no`), l'e-mail d'origine est transmis tel quel par `RawMailForwarder` (`sendmail -t`).
-  - Si la transcription échoue, `$transcript` vaut `null`. L'e-mail est quand même envoyé, avec un avertissement et l'en-tête `X-Voicemail-Transcription: failed`.
+  - Si la transcription échoue, `$transcript` vaut `null`. L'e-mail est quand même envoyé, avec un avertissement et l'en-tête `X-Voicemail-Transcription: failed`. L'audio est alors joint même si `mail.attach_audio` vaut `false`.
   - Si la conversion MP3 échoue, le WAV d'origine est joint à la place.
   - Si la composition ou l'envoi lève une exception, l'e-mail brut est transmis.
 - Le flux de sortie du dry-run (`$output`) traverse `Application` et `Cli`. Lorsqu'il est défini, chaque « envoi » ou « transmission » écrit dans ce flux.
 
 Autres points qui concernent plusieurs fichiers :
 
-- `Application::create()` est le seul endroit où les dépendances sont construites à partir de `Config`. Les tests instancient `Application` directement avec des bouchons `TranscriberInterface` en classes anonymes et un flux de sortie dry-run, puis vérifient le texte MIME produit. `tests/ApplicationTest.php` montre le modèle.
+- `Application::create()` est le seul endroit où les dépendances sont construites à partir de `Config`. Les tests instancient `Application` directement avec des bouchons `TranscriberInterface` en classes anonymes et un flux de sortie dry-run, puis vérifient le texte MIME produit. `tests/ApplicationTest.php` montre le modèle. `tests/CliTest.php` lance `bin/voicemail-ai` en sous-processus (toujours en `--dry-run`) pour les replis de bout en bout, et `tests/Transcription/OvhTranscriberTest.php` interroge un faux serveur AI Endpoints (serveur web intégré de PHP, `tests/fixtures/transcription-server.php`).
 - `OvhTranscriber` envoie le **WAV d'origine**, pas le MP3. Il retente les erreurs réseau, HTTP 429 et 5xx avec une attente exponentielle (`max_retries`).
 - `Config` est un objet valeur readonly construit à partir d'un fichier PHP qui retourne un tableau imbriqué (`ovh.*`, `audio.*`, `mail.*`, `log.*`). Une nouvelle option demande des modifications à trois endroits : le constructeur de `Config`, `Config::fromArray()` et `config/config.dist.php`. Le tableau de configuration du README doit aussi être mis à jour.
 - Les binaires externes (ffmpeg, sendmail) sont lancés uniquement via `Process\ProcessRunner`, qui utilise `proc_open` avec un tableau d'arguments, sans shell. Ne pas utiliser `exec`/`shell_exec` ni de commandes sous forme de chaîne.

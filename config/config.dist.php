@@ -43,7 +43,7 @@ return [
         // Envelope sender (sendmail -f), null lets Postfix decide.
         'envelope_sender' => null,
         'subject_prefix' => '',
-        // Attach the recording (MP3) to the email.
+        // Attach the recording (MP3) to the email. It is always attached when the transcription fails.
         'attach_audio' => true,
         // Custom templates (null = templates/ directory of the project).
         'html_template' => null,

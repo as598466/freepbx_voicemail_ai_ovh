@@ -23,14 +23,7 @@ final class ApplicationTest extends TestCase
 {
     public function testSendsEnrichedEmailWithTranscription(): void
     {
-        $transcriber = new class implements TranscriberInterface {
-            public function transcribe(AudioFile $audio): Transcript
-            {
-                return new Transcript('Bonjour, rappelez-moi au sujet du devis.', 'fr', 3.2);
-            }
-        };
-
-        $output = $this->runApplication($transcriber, $this->fixture());
+        $output = $this->runApplication($this->succeedingTranscriber(), $this->fixture());
 
         self::assertStringContainsString('To: Jean Dupont <jean.dupont@example.com>', $output);
         self::assertStringContainsString('X-Voicemail-Transcription: ok', $output);
@@ -40,17 +33,26 @@ final class ApplicationTest extends TestCase
 
     public function testSendsEmailEvenWhenTranscriptionFails(): void
     {
-        $transcriber = new class implements TranscriberInterface {
-            public function transcribe(AudioFile $audio): Transcript
-            {
-                throw new TranscriptionException('HTTP 503');
-            }
-        };
-
-        $output = $this->runApplication($transcriber, $this->fixture());
+        $output = $this->runApplication($this->failingTranscriber(), $this->fixture());
 
         self::assertStringContainsString('X-Voicemail-Transcription: failed', $output);
         self::assertStringContainsString("n'a pas pu être réalisée", quoted_printable_decode($output));
+    }
+
+    public function testOmitsAudioWhenAttachmentIsDisabled(): void
+    {
+        $output = $this->runApplication($this->succeedingTranscriber(), $this->fixture(), attachAudio: false);
+
+        self::assertStringContainsString('X-Voicemail-Transcription: ok', $output);
+        self::assertStringNotContainsString('filename=msg0000.wav', $output);
+    }
+
+    public function testAttachesAudioWhenTranscriptionFailsEvenIfAttachmentIsDisabled(): void
+    {
+        $output = $this->runApplication($this->failingTranscriber(), $this->fixture(), attachAudio: false);
+
+        self::assertStringContainsString('X-Voicemail-Transcription: failed', $output);
+        self::assertStringContainsString('filename=msg0000.wav', $output);
     }
 
     public function testForwardsEmailWithoutAudioUnchanged(): void
@@ -67,8 +69,40 @@ final class ApplicationTest extends TestCase
         self::assertSame($raw, $this->runApplication($transcriber, $raw));
     }
 
-    private function runApplication(TranscriberInterface $transcriber, string $raw): string
+    public function testForwardsOriginalEmailWhenComposingFails(): void
     {
+        $raw = $this->fixture();
+
+        $output = $this->runApplication($this->succeedingTranscriber(), $raw, htmlTemplate: '/nonexistent/email.html.php');
+
+        self::assertSame($raw, $output);
+    }
+
+    public function testForwardsOriginalEmailWithoutRecipient(): void
+    {
+        $raw = (string) preg_replace('/^To: .*\n/m', '', $this->fixture());
+
+        self::assertSame($raw, $this->runApplication($this->succeedingTranscriber(), $raw));
+    }
+
+    public function testFailsOnEmptyInput(): void
+    {
+        $output = $this->runApplication(
+            $this->succeedingTranscriber(),
+            " \n",
+            expectedExitCode: Application::EXIT_FAILURE,
+        );
+
+        self::assertSame('', $output);
+    }
+
+    private function runApplication(
+        TranscriberInterface $transcriber,
+        string $raw,
+        bool $attachAudio = true,
+        ?string $htmlTemplate = null,
+        int $expectedExitCode = Application::EXIT_SUCCESS,
+    ): string {
         $output = fopen('php://memory', 'w+');
         self::assertIsResource($output);
 
@@ -82,19 +116,40 @@ final class ApplicationTest extends TestCase
             mailer: new VoicemailMailer(
                 renderer: new TemplateRenderer(),
                 sendmailPath: '/usr/sbin/sendmail',
-                htmlTemplate: $templates . '/email.html.php',
+                htmlTemplate: $htmlTemplate ?? $templates . '/email.html.php',
                 textTemplate: $templates . '/email.txt.php',
             ),
             forwarder: new RawMailForwarder($processRunner, '/usr/sbin/sendmail'),
             logger: new NullLogger(),
+            attachAudio: $attachAudio,
             output: $output,
         );
 
-        self::assertSame(Application::EXIT_SUCCESS, $application->run($raw));
+        self::assertSame($expectedExitCode, $application->run($raw));
 
         rewind($output);
 
         return (string) stream_get_contents($output);
+    }
+
+    private function succeedingTranscriber(): TranscriberInterface
+    {
+        return new class implements TranscriberInterface {
+            public function transcribe(AudioFile $audio): Transcript
+            {
+                return new Transcript('Bonjour, rappelez-moi au sujet du devis.', 'fr', 3.2);
+            }
+        };
+    }
+
+    private function failingTranscriber(): TranscriberInterface
+    {
+        return new class implements TranscriberInterface {
+            public function transcribe(AudioFile $audio): Transcript
+            {
+                throw new TranscriptionException('HTTP 503');
+            }
+        };
     }
 
     private function fixture(): string
