@@ -119,7 +119,7 @@ final class ApplicationTest extends TestCase
                 htmlTemplate: $htmlTemplate ?? $templates . '/email.html.php',
                 textTemplate: $templates . '/email.txt.php',
             ),
-            forwarder: new RawMailForwarder($processRunner, '/usr/sbin/sendmail'),
+            forwarder: new RawMailForwarder($processRunner, '/usr/sbin/sendmail', $output),
             logger: new NullLogger(),
             attachAudio: $attachAudio,
             output: $output,

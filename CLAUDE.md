@@ -40,7 +40,7 @@ Composer est installé localement dans le projet (`composer.phar`, ignoré par g
   - Si la transcription échoue, `$transcript` vaut `null`. L'e-mail est quand même envoyé, avec un avertissement et l'en-tête `X-Voicemail-Transcription: failed`. L'audio est alors joint même si `mail.attach_audio` vaut `false`.
   - Si la conversion MP3 échoue, le WAV d'origine est joint à la place.
   - Si la composition ou l'envoi lève une exception, l'e-mail brut est transmis.
-- Le flux de sortie du dry-run (`$output`) traverse `Application` et `Cli`. Lorsqu'il est défini, chaque « envoi » ou « transmission » écrit dans ce flux.
+- Le flux de sortie du dry-run (`$output`) traverse `Application` et `Cli`, et il est transmis à `RawMailForwarder`. Lorsqu'il est défini, chaque « envoi » ou « transmission » écrit dans ce flux.
 
 Autres points qui concernent plusieurs fichiers :
 

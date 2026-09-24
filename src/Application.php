@@ -75,7 +75,7 @@ final readonly class Application
                 envelopeSender: $config->envelopeSender,
                 subjectPrefix: $config->subjectPrefix,
             ),
-            forwarder: new RawMailForwarder($processRunner, $config->sendmailPath),
+            forwarder: new RawMailForwarder($processRunner, $config->sendmailPath, $output),
             logger: $logger,
             attachAudio: $config->attachAudio,
             output: $output,
@@ -165,12 +165,6 @@ final readonly class Application
 
     private function forwardRaw(string $raw): int
     {
-        if (is_resource($this->output)) {
-            fwrite($this->output, $raw);
-
-            return self::EXIT_SUCCESS;
-        }
-
         try {
             $this->forwarder->forward($raw);
         } catch (Throwable $exception) {

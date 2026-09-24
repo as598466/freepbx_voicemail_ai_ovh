@@ -136,14 +136,8 @@ final class Cli
             return Application::EXIT_FAILURE;
         }
 
-        if (is_resource($output)) {
-            fwrite($output, $raw);
-
-            return Application::EXIT_FAILURE;
-        }
-
         try {
-            (new RawMailForwarder(new ProcessRunner(), $sendmailPath))->forward($raw);
+            (new RawMailForwarder(new ProcessRunner(), $sendmailPath, $output))->forward($raw);
         } catch (Throwable $forwardException) {
             syslog(LOG_CRIT, sprintf('voicemail-ai: %s', $forwardException->getMessage()));
         }
