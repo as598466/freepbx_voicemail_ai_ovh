@@ -1,0 +1,41 @@
+{
+    "name": "local/freepbx-voicemail-ai",
+    "description": "Asterisk/FreePBX voicemail mailcmd: AI transcription with OVHcloud AI Endpoints (Whisper) and delivery with PHPMailer.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "phpmailer/phpmailer": "^6.9",
+        "psr/log": "^3.0",
+        "zbateson/mail-mime-parser": "^3.0 || ^4.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.88",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "VoicemailAi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "VoicemailAi\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/voicemail-ai"
+    ],
+    "scripts": {
+        "cs-check": "php-cs-fixer check --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "test": "phpunit"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

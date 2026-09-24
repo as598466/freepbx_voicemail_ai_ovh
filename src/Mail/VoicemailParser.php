@@ -1,0 +1,126 @@
+<?php
+
+declare(strict_types=1);
+
+namespace VoicemailAi\Mail;
+
+use Throwable;
+use VoicemailAi\Audio\AudioFile;
+use VoicemailAi\Exception\ParseException;
+use ZBateson\MailMimeParser\Header\AddressHeader;
+use ZBateson\MailMimeParser\IMessage;
+use ZBateson\MailMimeParser\Message;
+use ZBateson\MailMimeParser\Message\IMessagePart;
+
+/**
+ * Parses the raw email piped by Asterisk to the voicemail "mailcmd".
+ */
+final readonly class VoicemailParser
+{
+    private const AUDIO_EXTENSIONS = ['wav', 'gsm', 'mp3', 'ogg', 'opus', 'flac', 'm4a', 'webm'];
+
+    /**
+     * @throws ParseException
+     */
+    public function parse(string $raw): Voicemail
+    {
+        try {
+            $message = Message::from($raw, false);
+        } catch (Throwable $exception) {
+            throw new ParseException('Unable to parse the voicemail email.', 0, $exception);
+        }
+
+        $from = $this->addresses($message, 'From')[0] ?? null;
+
+        return new Voicemail(
+            from: $from,
+            to: $this->addresses($message, 'To'),
+            subject: $this->header($message, 'Subject') ?? '',
+            body: $this->normalizeBody($message->getTextContent() ?? ''),
+            callerId: $this->header($message, 'X-Asterisk-CallerID'),
+            callerName: $this->header($message, 'X-Asterisk-CallerIDName'),
+            date: $this->rawHeader($message, 'Date'),
+            messageId: $this->rawHeader($message, 'Message-ID'),
+            audio: $this->audio($message),
+        );
+    }
+
+    /**
+     * @return list<Address>
+     */
+    private function addresses(IMessage $message, string $name): array
+    {
+        $header = $message->getHeader($name);
+
+        if (!$header instanceof AddressHeader) {
+            return [];
+        }
+
+        $addresses = [];
+
+        foreach ($header->getAddresses() as $address) {
+            $email = trim((string) $address->getEmail());
+
+            if ($email !== '') {
+                $addresses[] = new Address($email, trim((string) $address->getName()));
+            }
+        }
+
+        return $addresses;
+    }
+
+    private function header(IMessage $message, string $name): ?string
+    {
+        $value = trim((string) $message->getHeaderValue($name));
+
+        return $value === '' ? null : $value;
+    }
+
+    private function rawHeader(IMessage $message, string $name): ?string
+    {
+        $value = trim((string) $message->getHeader($name)?->getRawValue());
+
+        return $value === '' ? null : $value;
+    }
+
+    private function audio(IMessage $message): ?AudioFile
+    {
+        foreach ($message->getAllAttachmentParts() as $part) {
+            if (!$this->isAudio($part)) {
+                continue;
+            }
+
+            $content = $part->getBinaryContentStream()?->getContents() ?? '';
+
+            if ($content === '') {
+                continue;
+            }
+
+            $filename = trim((string) $part->getFilename());
+
+            return new AudioFile(
+                $filename !== '' ? $filename : 'voicemail.wav',
+                strtolower((string) $part->getContentType('audio/wav')),
+                $content,
+            );
+        }
+
+        return null;
+    }
+
+    private function isAudio(IMessagePart $part): bool
+    {
+        if (str_starts_with(strtolower((string) $part->getContentType()), 'audio/')) {
+            return true;
+        }
+
+        $extension = strtolower(pathinfo((string) $part->getFilename(), PATHINFO_EXTENSION));
+
+        return in_array($extension, self::AUDIO_EXTENSIONS, true);
+    }
+
+    private function normalizeBody(string $body): string
+    {
+        return trim(str_replace(["\r\n", "\r"], "\n", $body));
+    }
+}
