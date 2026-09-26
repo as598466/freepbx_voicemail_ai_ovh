@@ -1,4 +1,4 @@
-# FreePBX Voicemail AI
+# FreePBX Voicemail AI OVH
 
 Transcription automatique des messages vocaux FreePBX 17 / Asterisk avec
 [OVHcloud AI Endpoints](https://endpoints.ai.cloud.ovh.net/) (Whisper), puis envoi d'un e-mail
@@ -99,28 +99,34 @@ Contrôle : `grep mailcmd /etc/asterisk/voicemail.conf` doit afficher la command
 Le texte de l'e-mail configuré dans FreePBX (**Email Body**, variables `${VM_NAME}`,
 `${VM_DUR}`, `${VM_CALLERID}`...) est conservé : il apparaît dans la section « Détails » de
 l'e-mail, sous la transcription. Le sujet et l'expéditeur définis dans FreePBX sont aussi
-repris, sauf si `mail.from_address` / `mail.subject_prefix` sont renseignés.
+repris : `mail.subject_prefix` ajoute un préfixe au sujet, et `mail.from_address` (avec
+`mail.from_name`) remplace l'expéditeur.
 
 ## Configuration (`config/config.php`)
 
 | Clé                     | Défaut                                              | Rôle                                           |
 |-------------------------|-----------------------------------------------------|------------------------------------------------|
 | `ovh.base_url`          | `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1`  | API compatible OpenAI                          |
-| `ovh.token`             | —                                                   | Jeton AI Endpoints                             |
+| `ovh.token`             | `null`                                              | Jeton AI Endpoints                             |
 | `ovh.model`             | `whisper-large-v3`                                  | Modèle (voir le catalogue OVHcloud)            |
-| `ovh.language`          | `fr`                                                | Code ISO-639-1, `null` = détection auto        |
+| `ovh.language`          | `null`                                              | Code ISO-639-1 (`'fr'` dans le fichier d'exemple), `null` = détection auto |
 | `ovh.prompt`            | `null`                                              | Indice de contexte (noms propres, jargon...)   |
+| `ovh.temperature`       | `0.0`                                               | Température d'échantillonnage de Whisper       |
 | `ovh.timeout`           | `120`                                               | Délai max d'une requête (s)                    |
 | `ovh.max_retries`       | `2`                                                 | Nouvelles tentatives sur erreur temporaire     |
-| `audio.ffmpeg`          | `/usr/bin/ffmpeg`                                   | `null` = pièce jointe WAV d'origine            |
+| `audio.ffmpeg`          | `null`                                              | Binaire ffmpeg (`/usr/bin/ffmpeg` dans le fichier d'exemple), `null` = pièce jointe WAV d'origine |
 | `audio.mp3_bitrate`     | `32k`                                               | Débit du MP3 joint                             |
 | `mail.sendmail`         | `/usr/sbin/sendmail`                                | Binaire Postfix                                |
 | `mail.from_address`     | `null`                                              | Remplace l'expéditeur généré par Asterisk      |
+| `mail.from_name`        | `null`                                              | Nom de l'expéditeur, utilisé seulement avec `mail.from_address` |
 | `mail.envelope_sender`  | `null`                                              | Expéditeur d'enveloppe (`sendmail -f`)         |
-| `mail.subject_prefix`   | `''`                                                | Ex. `'[Répondeur] '`                           |
+| `mail.subject_prefix`   | `''`                                                | Préfixe ajouté au sujet, ex. `'[Répondeur] '`  |
 | `mail.attach_audio`     | `true`                                              | Joindre l'enregistrement (toujours joint si la transcription échoue) |
 | `mail.mailboxes`        | `[]`                                                | Réglages propres à une boîte vocale (voir ci-dessous) |
+| `log.ident`             | `voicemail-ai`                                      | Identifiant syslog (`journalctl -t`)           |
 | `log.debug`             | `false`                                             | Journaux détaillés                             |
+
+La colonne « Défaut » donne la valeur utilisée quand la clé est absente de `config/config.php`.
 
 ### Un rendu différent par boîte vocale
 
@@ -133,10 +139,15 @@ globales de la section `mail` :
 ```php
 'mailboxes' => [
     '1001' => [
-        'subject_prefix' => '[SAV] ',
+        'from_address' => 'messagerie@societe-a.example',
         'from_name' => 'Messagerie Société A',
+        'subject_prefix' => '[SAV] ',
     ],
-    '2000' => ['from_name' => 'Société B', 'attach_audio' => false],
+    '2000' => [
+        'from_address' => 'messagerie@societe-b.example',
+        'from_name' => 'Société B',
+        'attach_audio' => false,
+    ],
 ],
 ```
 
@@ -184,10 +195,12 @@ bin/voicemail-ai                    point d'entrée (mailcmd)
 config/config.dist.php              configuration d'exemple
 src/Cli.php                         options, chargement config, secours si config invalide
 src/Application.php                 orchestration et stratégie de repli
-src/Config.php
+src/Config.php                      lecture et validation de config/config.php
 src/Audio/                          AudioFile, AudioConverter (WAV → MP3, ffmpeg)
 src/Transcription/                  TranscriberInterface, OvhTranscriber, Transcript
-src/Mail/                           VoicemailParser, VoicemailMailer (PHPMailer), RawMailForwarder
+src/Mail/                           VoicemailParser, VoicemailMailer (PHPMailer), TemplateRenderer,
+                                    MailProfile(s) (réglages par boîte), RawMailForwarder
+src/Exception/                      exceptions de configuration, d'analyse et de processus
 src/Log/SyslogLogger.php            logger PSR-3 vers syslog
 src/Process/                        exécution de commandes sans shell
 templates/                          gabarits HTML et texte de l'e-mail
