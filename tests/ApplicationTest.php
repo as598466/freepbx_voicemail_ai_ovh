@@ -10,6 +10,8 @@ use Psr\Log\NullLogger;
 use VoicemailAi\Application;
 use VoicemailAi\Audio\AudioConverter;
 use VoicemailAi\Audio\AudioFile;
+use VoicemailAi\Mail\MailProfile;
+use VoicemailAi\Mail\MailProfiles;
 use VoicemailAi\Mail\RawMailForwarder;
 use VoicemailAi\Mail\TemplateRenderer;
 use VoicemailAi\Mail\VoicemailMailer;
@@ -52,6 +54,44 @@ final class ApplicationTest extends TestCase
         $output = $this->runApplication($this->failingTranscriber(), $this->fixture(), attachAudio: false);
 
         self::assertStringContainsString('X-Voicemail-Transcription: failed', $output);
+        self::assertStringContainsString('filename=msg0000.wav', $output);
+    }
+
+    public function testUsesMailSettingsOfTheMailbox(): void
+    {
+        $templates = dirname(__DIR__) . '/templates';
+        $profiles = new MailProfiles(
+            new MailProfile($templates . '/email.html.php', $templates . '/email.txt.php', subjectPrefix: '[Global] '),
+            [
+                '1001' => new MailProfile(
+                    $templates . '/email.html.php',
+                    $templates . '/email.txt.php',
+                    fromAddress: 'sav@example.com',
+                    fromName: 'Service client',
+                    subjectPrefix: '[SAV] ',
+                    attachAudio: false,
+                ),
+            ],
+        );
+
+        $output = $this->runApplication($this->succeedingTranscriber(), $this->fixture(), mailProfiles: $profiles);
+
+        self::assertStringContainsString('From: Service client <sav@example.com>', $output);
+        self::assertStringContainsString('[SAV] ', iconv_mime_decode_headers($output, 0, 'UTF-8')['Subject'] ?? '');
+        self::assertStringNotContainsString('filename=msg0000.wav', $output);
+    }
+
+    public function testUsesGlobalMailSettingsForOtherMailboxes(): void
+    {
+        $templates = dirname(__DIR__) . '/templates';
+        $profiles = new MailProfiles(
+            new MailProfile($templates . '/email.html.php', $templates . '/email.txt.php', subjectPrefix: '[Global] '),
+            ['2000' => new MailProfile('/nonexistent/email.html.php', $templates . '/email.txt.php')],
+        );
+
+        $output = $this->runApplication($this->succeedingTranscriber(), $this->fixture(), mailProfiles: $profiles);
+
+        self::assertStringContainsString('[Global] ', iconv_mime_decode_headers($output, 0, 'UTF-8')['Subject'] ?? '');
         self::assertStringContainsString('filename=msg0000.wav', $output);
     }
 
@@ -101,6 +141,7 @@ final class ApplicationTest extends TestCase
         string $raw,
         bool $attachAudio = true,
         ?string $htmlTemplate = null,
+        ?MailProfiles $mailProfiles = null,
         int $expectedExitCode = Application::EXIT_SUCCESS,
     ): string {
         $output = fopen('php://memory', 'w+');
@@ -116,12 +157,14 @@ final class ApplicationTest extends TestCase
             mailer: new VoicemailMailer(
                 renderer: new TemplateRenderer(),
                 sendmailPath: '/usr/sbin/sendmail',
-                htmlTemplate: $htmlTemplate ?? $templates . '/email.html.php',
-                textTemplate: $templates . '/email.txt.php',
             ),
             forwarder: new RawMailForwarder($processRunner, '/usr/sbin/sendmail', $output),
             logger: new NullLogger(),
-            attachAudio: $attachAudio,
+            mailProfiles: $mailProfiles ?? new MailProfiles(new MailProfile(
+                htmlTemplate: $htmlTemplate ?? $templates . '/email.html.php',
+                textTemplate: $templates . '/email.txt.php',
+                attachAudio: $attachAudio,
+            )),
             output: $output,
         );
 

@@ -21,6 +21,7 @@ final class VoicemailParserTest extends TestCase
         self::assertStringContainsString('Vous avez reçu un nouveau message', $voicemail->body);
         self::assertSame('Marie Martin <0612345678>', $voicemail->caller());
         self::assertSame('<Asterisk-1-1727165732-1001-4242@pbx.example.com>', $voicemail->messageId);
+        self::assertSame('1001', $voicemail->mailbox);
 
         self::assertNotNull($voicemail->audio);
         self::assertSame('msg0000.wav', $voicemail->audio->filename);
@@ -35,6 +36,7 @@ final class VoicemailParserTest extends TestCase
         $voicemail = (new VoicemailParser())->parse($raw);
 
         self::assertNull($voicemail->audio);
+        self::assertNull($voicemail->mailbox);
         self::assertSame('Message de 0612345678', $voicemail->body);
     }
 }

@@ -121,7 +121,32 @@ repris, sauf si `mail.from_address` / `mail.subject_prefix` sont renseignés.
 | `mail.attach_audio`     | `true`                                              | Joindre l'enregistrement (toujours joint si la transcription échoue) |
 | `mail.html_template`    | `templates/email.html.php`                          | Gabarit HTML personnalisé                      |
 | `mail.text_template`    | `templates/email.txt.php`                           | Gabarit texte personnalisé                     |
+| `mail.mailboxes`        | `[]`                                                | Réglages propres à une boîte vocale (voir ci-dessous) |
 | `log.debug`             | `false`                                             | Journaux détaillés                             |
+
+### Un rendu différent par boîte vocale
+
+Si le standard gère plusieurs numéros, chacun routé vers sa propre boîte vocale, `mail.mailboxes`
+permet d'adapter l'e-mail à chaque boîte. La clé est le numéro de la boîte (`${VM_MAILBOX}`,
+lu dans le `Message-ID` généré par Asterisk). La valeur peut remplacer `from_address`,
+`from_name`, `subject_prefix`, `attach_audio`, `html_template` et `text_template`. Les
+clés absentes reprennent les valeurs globales de la section `mail` :
+
+```php
+'mailboxes' => [
+    '1001' => [
+        'subject_prefix' => '[SAV] ',
+        'html_template' => '/etc/voicemail-ai/sav.html.php',
+        'text_template' => '/etc/voicemail-ai/sav.txt.php',
+    ],
+    '2000' => ['from_name' => 'Société B', 'attach_audio' => false],
+],
+```
+
+Les gabarits reçoivent `$voicemail` (dont `$voicemail->mailbox`), `$transcript` (`null` en
+cas d'échec) et `$attachment`. Le plus simple est de partir d'une copie de `templates/`. Une
+option inconnue fait échouer le chargement de la configuration : les messages sont alors
+transmis sans enrichissement, jamais perdus.
 
 Un autre fichier de configuration peut être passé avec `--config=/chemin/config.php` ou la
 variable d'environnement `VOICEMAIL_AI_CONFIG`.

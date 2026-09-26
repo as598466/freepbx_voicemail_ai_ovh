@@ -9,6 +9,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 use VoicemailAi\Audio\AudioConverter;
 use VoicemailAi\Audio\AudioFile;
+use VoicemailAi\Mail\MailProfiles;
 use VoicemailAi\Mail\RawMailForwarder;
 use VoicemailAi\Mail\TemplateRenderer;
 use VoicemailAi\Mail\VoicemailMailer;
@@ -40,7 +41,7 @@ final readonly class Application
         private VoicemailMailer $mailer,
         private RawMailForwarder $forwarder,
         private LoggerInterface $logger,
-        private bool $attachAudio = true,
+        private MailProfiles $mailProfiles,
         private mixed $output = null,
     ) {}
 
@@ -68,16 +69,11 @@ final readonly class Application
             mailer: new VoicemailMailer(
                 renderer: new TemplateRenderer(),
                 sendmailPath: $config->sendmailPath,
-                htmlTemplate: $config->htmlTemplate,
-                textTemplate: $config->textTemplate,
-                fromAddress: $config->fromAddress,
-                fromName: $config->fromName,
                 envelopeSender: $config->envelopeSender,
-                subjectPrefix: $config->subjectPrefix,
             ),
             forwarder: new RawMailForwarder($processRunner, $config->sendmailPath, $output),
             logger: $logger,
-            attachAudio: $config->attachAudio,
+            mailProfiles: $config->mailProfiles,
             output: $output,
         );
     }
@@ -107,12 +103,18 @@ final readonly class Application
             return $this->forwardRaw($raw);
         }
 
+        $profile = $this->mailProfiles->for($voicemail->mailbox);
+
+        if ($profile !== $this->mailProfiles->default) {
+            $this->logger->debug('Using mail settings of mailbox {mailbox}.', ['mailbox' => $voicemail->mailbox]);
+        }
+
         $transcript = $this->transcribe($voicemail->audio);
         // Without transcription the recording is the only content left: attach it regardless of the setting.
-        $attachment = $this->attachAudio || $transcript === null ? $this->converter->toMp3($voicemail->audio) : null;
+        $attachment = $profile->attachAudio || $transcript === null ? $this->converter->toMp3($voicemail->audio) : null;
 
         try {
-            $this->send($this->mailer->compose($voicemail, $transcript, $attachment));
+            $this->send($this->mailer->compose($voicemail, $transcript, $profile, $attachment));
         } catch (Throwable $exception) {
             $this->logger->error('Sending enriched email failed, forwarding original email: {exception}', [
                 'exception' => $exception,
@@ -121,7 +123,8 @@ final readonly class Application
             return $this->forwardRaw($raw);
         }
 
-        $this->logger->info('Voicemail from {caller} sent to {recipients} (transcription: {status}).', [
+        $this->logger->info('Voicemail {mailbox} from {caller} sent to {recipients} (transcription: {status}).', [
+            'mailbox' => $voicemail->mailbox ?? 'unknown',
             'caller' => $voicemail->caller() ?? 'unknown',
             'recipients' => implode(', ', array_map(static fn($address) => $address->email, $voicemail->to)),
             'status' => $transcript !== null ? 'ok' : 'failed',

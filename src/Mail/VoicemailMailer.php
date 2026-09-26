@@ -17,19 +17,18 @@ final readonly class VoicemailMailer
     public function __construct(
         private TemplateRenderer $renderer,
         private string $sendmailPath,
-        private string $htmlTemplate,
-        private string $textTemplate,
-        private ?string $fromAddress = null,
-        private ?string $fromName = null,
         private ?string $envelopeSender = null,
-        private string $subjectPrefix = '',
     ) {}
 
     /**
      * @throws MailerException
      */
-    public function compose(Voicemail $voicemail, ?Transcript $transcript, ?AudioFile $attachment = null): PHPMailer
-    {
+    public function compose(
+        Voicemail $voicemail,
+        ?Transcript $transcript,
+        MailProfile $profile,
+        ?AudioFile $attachment = null,
+    ): PHPMailer {
         $mail = new PHPMailer(true);
         $mail->isSendmail();
         $mail->Sendmail = $this->sendmailPath;
@@ -37,8 +36,8 @@ final readonly class VoicemailMailer
         $mail->Encoding = PHPMailer::ENCODING_QUOTED_PRINTABLE;
         $mail->XMailer = 'freepbx-voicemail-ai';
 
-        $from = $this->fromAddress !== null
-            ? new Address($this->fromAddress, $this->fromName ?? '')
+        $from = $profile->fromAddress !== null
+            ? new Address($profile->fromAddress, $profile->fromName ?? '')
             : $voicemail->from;
 
         if ($from === null) {
@@ -59,7 +58,7 @@ final readonly class VoicemailMailer
             $mail->addAddress($recipient->email, $recipient->name);
         }
 
-        $mail->Subject = $this->subjectPrefix . $voicemail->subject;
+        $mail->Subject = $profile->subjectPrefix . $voicemail->subject;
 
         if ($voicemail->messageId !== null && preg_match('/^<[^<>\s]+@[^<>\s]+>$/', $voicemail->messageId) === 1) {
             $mail->MessageID = $voicemail->messageId;
@@ -86,8 +85,8 @@ final readonly class VoicemailMailer
         ];
 
         $mail->isHTML(true);
-        $mail->Body = $this->renderer->render($this->htmlTemplate, $variables);
-        $mail->AltBody = $this->renderer->render($this->textTemplate, $variables);
+        $mail->Body = $this->renderer->render($profile->htmlTemplate, $variables);
+        $mail->AltBody = $this->renderer->render($profile->textTemplate, $variables);
 
         if ($attachment !== null) {
             $mail->addStringAttachment(

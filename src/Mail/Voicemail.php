@@ -24,6 +24,7 @@ final readonly class Voicemail
         public ?string $date = null,
         public ?string $messageId = null,
         public ?AudioFile $audio = null,
+        public ?string $mailbox = null,
     ) {}
 
     /**

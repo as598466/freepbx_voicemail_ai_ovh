@@ -48,6 +48,17 @@ return [
         // Custom templates (null = templates/ directory of the project).
         'html_template' => null,
         'text_template' => null,
+        // Per voicemail box overrides (box number = ${VM_MAILBOX}), e.g. one per phone number.
+        // Allowed keys: from_address, from_name, subject_prefix, attach_audio, html_template,
+        // text_template. Missing keys keep the values above.
+        'mailboxes' => [
+            // '1001' => [
+            //     'from_name' => 'Service client',
+            //     'subject_prefix' => '[SAV] ',
+            //     'html_template' => '/etc/voicemail-ai/sav.html.php',
+            //     'text_template' => '/etc/voicemail-ai/sav.txt.php',
+            // ],
+        ],
     ],
     'log' => [
         // Messages are sent to syslog (journalctl -t voicemail-ai).

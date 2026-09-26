@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace VoicemailAi;
 
 use VoicemailAi\Exception\ConfigurationException;
+use VoicemailAi\Mail\MailProfile;
+use VoicemailAi\Mail\MailProfiles;
 
 final readonly class Config
 {
@@ -13,6 +15,18 @@ final readonly class Config
     private const DEFAULT_BASE_URL = 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1';
 
     private const DEFAULT_MODEL = 'whisper-large-v3';
+
+    /**
+     * Options of the "mail" section that can be overridden per voicemail box.
+     */
+    private const MAILBOX_OPTIONS = [
+        'from_address',
+        'from_name',
+        'subject_prefix',
+        'attach_audio',
+        'html_template',
+        'text_template',
+    ];
 
     public function __construct(
         public string $transcriptionUrl,
@@ -26,13 +40,8 @@ final readonly class Config
         public ?string $ffmpegPath,
         public string $mp3Bitrate,
         public string $sendmailPath,
-        public ?string $fromAddress,
-        public ?string $fromName,
         public ?string $envelopeSender,
-        public string $subjectPrefix,
-        public bool $attachAudio,
-        public string $htmlTemplate,
-        public string $textTemplate,
+        public MailProfiles $mailProfiles,
         public string $logIdent,
         public bool $debug,
     ) {}
@@ -66,7 +75,6 @@ final readonly class Config
         $audio = self::section($config, 'audio');
         $mail = self::section($config, 'mail');
         $log = self::section($config, 'log');
-        $templates = dirname(__DIR__) . '/templates';
 
         $baseUrl = self::string($ovh['base_url'] ?? null) ?? self::DEFAULT_BASE_URL;
 
@@ -82,15 +90,59 @@ final readonly class Config
             ffmpegPath: self::string($audio['ffmpeg'] ?? null),
             mp3Bitrate: self::string($audio['mp3_bitrate'] ?? null) ?? '32k',
             sendmailPath: self::string($mail['sendmail'] ?? null) ?? self::DEFAULT_SENDMAIL,
-            fromAddress: self::string($mail['from_address'] ?? null),
-            fromName: self::string($mail['from_name'] ?? null),
             envelopeSender: self::string($mail['envelope_sender'] ?? null),
-            subjectPrefix: (string) ($mail['subject_prefix'] ?? ''),
-            attachAudio: (bool) ($mail['attach_audio'] ?? true),
-            htmlTemplate: self::string($mail['html_template'] ?? null) ?? $templates . '/email.html.php',
-            textTemplate: self::string($mail['text_template'] ?? null) ?? $templates . '/email.txt.php',
+            mailProfiles: self::mailProfiles($mail),
             logIdent: self::string($log['ident'] ?? null) ?? 'voicemail-ai',
             debug: (bool) ($log['debug'] ?? false),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $mail
+     *
+     * @throws ConfigurationException
+     */
+    private static function mailProfiles(array $mail): MailProfiles
+    {
+        $mailboxes = self::section($mail, 'mailboxes');
+        $profiles = [];
+
+        foreach ($mailboxes as $mailbox => $overrides) {
+            if (!is_array($overrides)) {
+                throw new ConfigurationException(sprintf('Configuration of mailbox "%s" must be an array.', $mailbox));
+            }
+
+            $unknown = array_diff(array_keys($overrides), self::MAILBOX_OPTIONS);
+
+            if ($unknown !== []) {
+                throw new ConfigurationException(sprintf(
+                    'Unknown option(s) "%s" for mailbox "%s", allowed: %s.',
+                    implode('", "', $unknown),
+                    $mailbox,
+                    implode(', ', self::MAILBOX_OPTIONS),
+                ));
+            }
+
+            $profiles[(string) $mailbox] = self::mailProfile(array_replace($mail, $overrides));
+        }
+
+        return new MailProfiles(self::mailProfile($mail), $profiles);
+    }
+
+    /**
+     * @param array<string, mixed> $mail
+     */
+    private static function mailProfile(array $mail): MailProfile
+    {
+        $templates = dirname(__DIR__) . '/templates';
+
+        return new MailProfile(
+            htmlTemplate: self::string($mail['html_template'] ?? null) ?? $templates . '/email.html.php',
+            textTemplate: self::string($mail['text_template'] ?? null) ?? $templates . '/email.txt.php',
+            fromAddress: self::string($mail['from_address'] ?? null),
+            fromName: self::string($mail['from_name'] ?? null),
+            subjectPrefix: (string) ($mail['subject_prefix'] ?? ''),
+            attachAudio: (bool) ($mail['attach_audio'] ?? true),
         );
     }
 

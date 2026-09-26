@@ -25,11 +25,12 @@ final class ConfigTest extends TestCase
         self::assertNull($config->ffmpegPath);
         self::assertSame('32k', $config->mp3Bitrate);
         self::assertSame(Config::DEFAULT_SENDMAIL, $config->sendmailPath);
-        self::assertNull($config->fromAddress);
-        self::assertSame('', $config->subjectPrefix);
-        self::assertTrue($config->attachAudio);
-        self::assertFileExists($config->htmlTemplate);
-        self::assertFileExists($config->textTemplate);
+        self::assertNull($config->mailProfiles->default->fromAddress);
+        self::assertSame('', $config->mailProfiles->default->subjectPrefix);
+        self::assertTrue($config->mailProfiles->default->attachAudio);
+        self::assertFileExists($config->mailProfiles->default->htmlTemplate);
+        self::assertFileExists($config->mailProfiles->default->textTemplate);
+        self::assertSame([], $config->mailProfiles->mailboxes);
         self::assertSame('voicemail-ai', $config->logIdent);
         self::assertFalse($config->debug);
     }
@@ -58,9 +59,47 @@ final class ConfigTest extends TestCase
         self::assertNull($config->prompt);
         self::assertSame(1, $config->timeout);
         self::assertSame(0, $config->maxRetries);
-        self::assertSame('vm@example.com', $config->fromAddress);
-        self::assertSame('[Répondeur] ', $config->subjectPrefix);
-        self::assertFalse($config->attachAudio);
+        self::assertSame('vm@example.com', $config->mailProfiles->default->fromAddress);
+        self::assertSame('[Répondeur] ', $config->mailProfiles->default->subjectPrefix);
+        self::assertFalse($config->mailProfiles->default->attachAudio);
+    }
+
+    public function testMailboxOverridesInheritGlobalMailSettings(): void
+    {
+        $config = Config::fromArray([
+            'mail' => [
+                'from_address' => 'vm@example.com',
+                'subject_prefix' => '[Répondeur] ',
+                'html_template' => '/etc/voicemail-ai/email.html.php',
+                'mailboxes' => [
+                    '1001' => ['subject_prefix' => '[SAV] ', 'attach_audio' => false],
+                ],
+            ],
+        ]);
+
+        $profile = $config->mailProfiles->for('1001');
+
+        self::assertSame('[SAV] ', $profile->subjectPrefix);
+        self::assertFalse($profile->attachAudio);
+        self::assertSame('vm@example.com', $profile->fromAddress);
+        self::assertSame('/etc/voicemail-ai/email.html.php', $profile->htmlTemplate);
+        self::assertSame($config->mailProfiles->default, $config->mailProfiles->for('2000'));
+        self::assertSame($config->mailProfiles->default, $config->mailProfiles->for(null));
+    }
+
+    public function testRejectsUnknownMailboxOption(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Unknown option(s) "html_templat" for mailbox "1001"');
+
+        Config::fromArray(['mail' => ['mailboxes' => ['1001' => ['html_templat' => '/tmp/x.php']]]]);
+    }
+
+    public function testRejectsMailboxThatIsNotAnArray(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        Config::fromArray(['mail' => ['mailboxes' => ['1001' => '[SAV] ']]]);
     }
 
     public function testDistributedFileIsValid(): void
