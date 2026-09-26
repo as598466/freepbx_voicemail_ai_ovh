@@ -24,8 +24,6 @@ final readonly class Config
         'from_name',
         'subject_prefix',
         'attach_audio',
-        'html_template',
-        'text_template',
     ];
 
     public function __construct(
@@ -134,11 +132,7 @@ final readonly class Config
      */
     private static function mailProfile(array $mail): MailProfile
     {
-        $templates = dirname(__DIR__) . '/templates';
-
         return new MailProfile(
-            htmlTemplate: self::string($mail['html_template'] ?? null) ?? $templates . '/email.html.php',
-            textTemplate: self::string($mail['text_template'] ?? null) ?? $templates . '/email.txt.php',
             fromAddress: self::string($mail['from_address'] ?? null),
             fromName: self::string($mail['from_name'] ?? null),
             subjectPrefix: (string) ($mail['subject_prefix'] ?? ''),

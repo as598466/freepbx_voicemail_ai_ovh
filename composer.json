@@ -1,5 +1,5 @@
 {
-    "name": "local/freepbx-voicemail-ai",
+    "name": "local/freepbx-voicemail-ai-ovh",
     "description": "Asterisk/FreePBX voicemail mailcmd: AI transcription with OVHcloud AI Endpoints (Whisper) and delivery with PHPMailer.",
     "type": "project",
     "license": "proprietary",

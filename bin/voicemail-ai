@@ -5,7 +5,7 @@
  * Voicemail "mailcmd" for Asterisk / FreePBX.
  *
  * Asterisk pipes the complete voicemail email (RFC 5322 + MIME) on stdin.
- * Usage: /usr/bin/php /opt/freepbx-voicemail-ai/bin/voicemail-ai [--config=FILE] [--dry-run] [--verbose]
+ * Usage: /usr/bin/php /opt/freepbx-voicemail-ai-ovh/bin/voicemail-ai [--config=FILE] [--dry-run] [--verbose]
  */
 
 declare(strict_types=1);

@@ -48,26 +48,26 @@ Les erreurs réseau, HTTP 429 et 5xx sont retentées (`max_retries`, attente exp
 ## Installation
 
 ```bash
-apt install php8.2-curl php8.2-mbstring ffmpeg composer
+apt install git php8.2-curl php8.2-mbstring ffmpeg composer
 ```
 
 ```bash
-cp -r freepbx_voicemail_ai /opt/freepbx-voicemail-ai
+git clone https://github.com/as598466/freepbx-voicemail-ai-ovh.git /opt/freepbx-voicemail-ai-ovh
 ```
 
 ```bash
-cd /opt/freepbx-voicemail-ai && composer install --no-dev --optimize-autoloader
+cd /opt/freepbx-voicemail-ai-ovh && composer install --no-dev --optimize-autoloader
 ```
 
 ```bash
-cp /opt/freepbx-voicemail-ai/config/config.dist.php /opt/freepbx-voicemail-ai/config/config.php
+cp /opt/freepbx-voicemail-ai-ovh/config/config.dist.php /opt/freepbx-voicemail-ai-ovh/config/config.php
 ```
 
 Renseigner au minimum `ovh.token` dans `config/config.php`, puis protéger le fichier (il contient
 le jeton) :
 
 ```bash
-chown -R root:asterisk /opt/freepbx-voicemail-ai && chmod 640 /opt/freepbx-voicemail-ai/config/config.php
+chown -R root:asterisk /opt/freepbx-voicemail-ai-ovh && chmod 640 /opt/freepbx-voicemail-ai-ovh/config/config.php
 ```
 
 ## Test avant mise en production
@@ -76,7 +76,7 @@ L'option `--dry-run` effectue la vraie transcription mais affiche l'e-mail produ
 l'envoyer. Le lancer en tant qu'utilisateur `asterisk`, comme le fera Asterisk :
 
 ```bash
-sudo -u asterisk /usr/bin/php /opt/freepbx-voicemail-ai/bin/voicemail-ai --dry-run --verbose < /opt/freepbx-voicemail-ai/tests/fixtures/voicemail.eml
+sudo -u asterisk /usr/bin/php /opt/freepbx-voicemail-ai-ovh/bin/voicemail-ai --dry-run --verbose < /opt/freepbx-voicemail-ai-ovh/tests/fixtures/voicemail.eml
 ```
 
 Le fichier d'exemple contient un silence : la transcription attendue est vide (« Aucune parole
@@ -88,7 +88,7 @@ récupérer un e-mail réellement généré (voir *Dépannage*).
 1. **Paramètres → Voicemail Admin → Settings**, onglet de configuration des e-mails.
 2. Champ **Mail Command** :
    ```
-   /usr/bin/php /opt/freepbx-voicemail-ai/bin/voicemail-ai
+   /usr/bin/php /opt/freepbx-voicemail-ai-ovh/bin/voicemail-ai
    ```
 3. Vérifier que les boîtes vocales ont **Email Attachment = yes** (sinon l'e-mail est transmis
    sans transcription).
@@ -119,8 +119,6 @@ repris, sauf si `mail.from_address` / `mail.subject_prefix` sont renseignés.
 | `mail.envelope_sender`  | `null`                                              | Expéditeur d'enveloppe (`sendmail -f`)         |
 | `mail.subject_prefix`   | `''`                                                | Ex. `'[Répondeur] '`                           |
 | `mail.attach_audio`     | `true`                                              | Joindre l'enregistrement (toujours joint si la transcription échoue) |
-| `mail.html_template`    | `templates/email.html.php`                          | Gabarit HTML personnalisé                      |
-| `mail.text_template`    | `templates/email.txt.php`                           | Gabarit texte personnalisé                     |
 | `mail.mailboxes`        | `[]`                                                | Réglages propres à une boîte vocale (voir ci-dessous) |
 | `log.debug`             | `false`                                             | Journaux détaillés                             |
 
@@ -129,23 +127,20 @@ repris, sauf si `mail.from_address` / `mail.subject_prefix` sont renseignés.
 Si le standard gère plusieurs numéros, chacun routé vers sa propre boîte vocale, `mail.mailboxes`
 permet d'adapter l'e-mail à chaque boîte. La clé est le numéro de la boîte (`${VM_MAILBOX}`,
 lu dans le `Message-ID` généré par Asterisk). La valeur peut remplacer `from_address`,
-`from_name`, `subject_prefix`, `attach_audio`, `html_template` et `text_template`. Les
-clés absentes reprennent les valeurs globales de la section `mail` :
+`from_name`, `subject_prefix` et `attach_audio`. Les clés absentes reprennent les valeurs
+globales de la section `mail` :
 
 ```php
 'mailboxes' => [
     '1001' => [
         'subject_prefix' => '[SAV] ',
-        'html_template' => '/etc/voicemail-ai/sav.html.php',
-        'text_template' => '/etc/voicemail-ai/sav.txt.php',
+        'from_name' => 'Messagerie Société A',
     ],
     '2000' => ['from_name' => 'Société B', 'attach_audio' => false],
 ],
 ```
 
-Les gabarits reçoivent `$voicemail` (dont `$voicemail->mailbox`), `$transcript` (`null` en
-cas d'échec) et `$attachment`. Le plus simple est de partir d'une copie de `templates/`. Une
-option inconnue fait échouer le chargement de la configuration : les messages sont alors
+Une option inconnue fait échouer le chargement de la configuration : les messages sont alors
 transmis sans enrichissement, jamais perdus.
 
 Un autre fichier de configuration peut être passé avec `--config=/chemin/config.php` ou la

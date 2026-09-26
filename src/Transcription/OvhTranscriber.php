@@ -19,7 +19,7 @@ final readonly class OvhTranscriber implements TranscriberInterface
 {
     private const RETRYABLE_STATUS_CODES = [408, 425, 429, 500, 502, 503, 504];
 
-    private const USER_AGENT = 'freepbx-voicemail-ai/1.0';
+    private const USER_AGENT = 'freepbx-voicemail-ai-ovh/1.0';
 
     public function __construct(
         private string $endpointUrl,

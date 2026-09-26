@@ -45,18 +45,13 @@ return [
         'subject_prefix' => '',
         // Attach the recording (MP3) to the email. It is always attached when the transcription fails.
         'attach_audio' => true,
-        // Custom templates (null = templates/ directory of the project).
-        'html_template' => null,
-        'text_template' => null,
         // Per voicemail box overrides (box number = ${VM_MAILBOX}), e.g. one per phone number.
-        // Allowed keys: from_address, from_name, subject_prefix, attach_audio, html_template,
-        // text_template. Missing keys keep the values above.
+        // Allowed keys: from_address, from_name, subject_prefix, attach_audio. Missing keys keep
+        // the values above.
         'mailboxes' => [
             // '1001' => [
             //     'from_name' => 'Service client',
             //     'subject_prefix' => '[SAV] ',
-            //     'html_template' => '/etc/voicemail-ai/sav.html.php',
-            //     'text_template' => '/etc/voicemail-ai/sav.txt.php',
             // ],
         ],
     ],

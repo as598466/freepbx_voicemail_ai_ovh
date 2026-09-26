@@ -10,8 +10,6 @@ namespace VoicemailAi\Mail;
 final readonly class MailProfile
 {
     public function __construct(
-        public string $htmlTemplate,
-        public string $textTemplate,
         public ?string $fromAddress = null,
         public ?string $fromName = null,
         public string $subjectPrefix = '',

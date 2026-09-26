@@ -59,13 +59,10 @@ final class ApplicationTest extends TestCase
 
     public function testUsesMailSettingsOfTheMailbox(): void
     {
-        $templates = dirname(__DIR__) . '/templates';
         $profiles = new MailProfiles(
-            new MailProfile($templates . '/email.html.php', $templates . '/email.txt.php', subjectPrefix: '[Global] '),
+            new MailProfile(subjectPrefix: '[Global] '),
             [
                 '1001' => new MailProfile(
-                    $templates . '/email.html.php',
-                    $templates . '/email.txt.php',
                     fromAddress: 'sav@example.com',
                     fromName: 'Service client',
                     subjectPrefix: '[SAV] ',
@@ -83,10 +80,9 @@ final class ApplicationTest extends TestCase
 
     public function testUsesGlobalMailSettingsForOtherMailboxes(): void
     {
-        $templates = dirname(__DIR__) . '/templates';
         $profiles = new MailProfiles(
-            new MailProfile($templates . '/email.html.php', $templates . '/email.txt.php', subjectPrefix: '[Global] '),
-            ['2000' => new MailProfile('/nonexistent/email.html.php', $templates . '/email.txt.php')],
+            new MailProfile(subjectPrefix: '[Global] '),
+            ['2000' => new MailProfile(subjectPrefix: '[Autre] ', attachAudio: false)],
         );
 
         $output = $this->runApplication($this->succeedingTranscriber(), $this->fixture(), mailProfiles: $profiles);
@@ -113,7 +109,7 @@ final class ApplicationTest extends TestCase
     {
         $raw = $this->fixture();
 
-        $output = $this->runApplication($this->succeedingTranscriber(), $raw, htmlTemplate: '/nonexistent/email.html.php');
+        $output = $this->runApplication($this->succeedingTranscriber(), $raw, templateDirectory: '/nonexistent');
 
         self::assertSame($raw, $output);
     }
@@ -140,7 +136,7 @@ final class ApplicationTest extends TestCase
         TranscriberInterface $transcriber,
         string $raw,
         bool $attachAudio = true,
-        ?string $htmlTemplate = null,
+        ?string $templateDirectory = null,
         ?MailProfiles $mailProfiles = null,
         int $expectedExitCode = Application::EXIT_SUCCESS,
     ): string {
@@ -148,7 +144,6 @@ final class ApplicationTest extends TestCase
         self::assertIsResource($output);
 
         $processRunner = new ProcessRunner();
-        $templates = dirname(__DIR__) . '/templates';
 
         $application = new Application(
             parser: new VoicemailParser(),
@@ -157,14 +152,11 @@ final class ApplicationTest extends TestCase
             mailer: new VoicemailMailer(
                 renderer: new TemplateRenderer(),
                 sendmailPath: '/usr/sbin/sendmail',
+                templateDirectory: $templateDirectory ?? dirname(__DIR__) . '/templates',
             ),
             forwarder: new RawMailForwarder($processRunner, '/usr/sbin/sendmail', $output),
             logger: new NullLogger(),
-            mailProfiles: $mailProfiles ?? new MailProfiles(new MailProfile(
-                htmlTemplate: $htmlTemplate ?? $templates . '/email.html.php',
-                textTemplate: $templates . '/email.txt.php',
-                attachAudio: $attachAudio,
-            )),
+            mailProfiles: $mailProfiles ?? new MailProfiles(new MailProfile(attachAudio: $attachAudio)),
             output: $output,
         );
 

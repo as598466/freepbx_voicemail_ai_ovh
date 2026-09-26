@@ -57,9 +57,9 @@ final class CliTest extends TestCase
         $raw = $this->fixture();
 
         // Redeclaring a function is a compile error that no try/catch can intercept.
-        $template = $this->temporaryFile('<?php function vmai_fatal() {} function vmai_fatal() {}');
+        $config = $this->temporaryFile('<?php function vmai_fatal() {} function vmai_fatal() {}');
 
-        $result = $this->runCli($raw, ['--config=' . $this->config(['mail' => ['html_template' => $template]])]);
+        $result = $this->runCli($raw, ['--config=' . $config]);
 
         self::assertNotSame(0, $result['exitCode']);
         self::assertSame($raw, $result['stdout']);

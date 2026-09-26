@@ -14,10 +14,13 @@ use VoicemailAi\Transcription\Transcript;
  */
 final readonly class VoicemailMailer
 {
+    private const TEMPLATE_DIRECTORY = __DIR__ . '/../../templates';
+
     public function __construct(
         private TemplateRenderer $renderer,
         private string $sendmailPath,
         private ?string $envelopeSender = null,
+        private string $templateDirectory = self::TEMPLATE_DIRECTORY,
     ) {}
 
     /**
@@ -34,7 +37,7 @@ final readonly class VoicemailMailer
         $mail->Sendmail = $this->sendmailPath;
         $mail->CharSet = PHPMailer::CHARSET_UTF8;
         $mail->Encoding = PHPMailer::ENCODING_QUOTED_PRINTABLE;
-        $mail->XMailer = 'freepbx-voicemail-ai';
+        $mail->XMailer = 'freepbx-voicemail-ai-ovh';
 
         $from = $profile->fromAddress !== null
             ? new Address($profile->fromAddress, $profile->fromName ?? '')
@@ -85,8 +88,8 @@ final readonly class VoicemailMailer
         ];
 
         $mail->isHTML(true);
-        $mail->Body = $this->renderer->render($profile->htmlTemplate, $variables);
-        $mail->AltBody = $this->renderer->render($profile->textTemplate, $variables);
+        $mail->Body = $this->renderer->render($this->templateDirectory . '/email.html.php', $variables);
+        $mail->AltBody = $this->renderer->render($this->templateDirectory . '/email.txt.php', $variables);
 
         if ($attachment !== null) {
             $mail->addStringAttachment(
